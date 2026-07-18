@@ -17,8 +17,20 @@ option(FULLCHECK "Enable full base64 checking" OFF)
 option(NAVX512 "Disable AVX512" OFF)
 option(BUILD_APP "Build executables" OFF)
 
-message(STATUS "Configuring with CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
-if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+message(STATUS "Configuring with CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}, CMAKE_OSX_ARCHITECTURES ${CMAKE_OSX_ARCHITECTURES}")
+
+# On Apple platforms, CMAKE_OSX_ARCHITECTURES is the authoritative target arch
+# when set (e.g. building x86_64 on Apple Silicon). CMAKE_SYSTEM_PROCESSOR may
+# report the host architecture instead of the target.
+if(CMAKE_OSX_ARCHITECTURES)
+    if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64|AMD64")
+        set(ARCH_AMD64 ON)
+    elseif(CMAKE_OSX_ARCHITECTURES MATCHES "aarch64|arm64")
+        set(ARCH_AARCH64 ON)
+    elseif(CMAKE_OSX_ARCHITECTURES MATCHES "ppc64le")
+        set(ARCH_PPC64LE ON)
+    endif()
+elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
     set(ARCH_AMD64 ON)
 elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
     set(ARCH_AMD64 ON)
@@ -49,6 +61,16 @@ if(ARCH_PPC64LE)
     set(MSSE "-D__SSSE3__")
 elseif(ARCH_AARCH64)
     set(MARCH "-march=armv8-a")
+elseif(ARCH_AMD64)
+    # When cross-compiling (e.g. building x86_64 on Apple Silicon M3),
+    # -march=native detects the host CPU (e.g. apple-m3) which is
+    # invalid for the target architecture. Use a safe baseline.
+    if(CMAKE_CROSSCOMPILING OR CMAKE_OSX_ARCHITECTURES)
+        set(MARCH "-march=x86-64")
+    else()
+        set(MARCH "-march=native")
+    endif()
+    set(MSSE "-mssse3")
 else()
     set(MARCH "-march=native")
     set(MSSE "-mssse3")
